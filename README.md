@@ -147,6 +147,9 @@ EOF
 
 ### ./src/routes/auth_routes.js
 
+> Validation affects flow control, and it would be more intuetively to have it in controller, but in this case code readibilty trumps separation of concern.
+> Also having all validators in the routes helps with validation reuse.
+
 ```bash
 cat > ./src/routes/auth_routes.js << 'EOF'
 const express = require('express');
@@ -199,7 +202,7 @@ exports.login = (req, res, next) => {
                 user: user
             });
         }
-        const token = jwt.sign({ userId: user.id, role: user.role }, 'YourJWTSecretKey', { expiresIn: '1h' });
+        const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET_KEY, { expiresIn: '1h' });
         return res.json({ token });
     })(req, res, next);
 };
@@ -238,7 +241,7 @@ exports.renew_token = (req, res) => {
         return res.status(404).json({ error: 'User not found' });
     }
 
-    const newToken = jwt.sign({ userId: user.id, role: user.role }, 'YourJWTSecretKey', { expiresIn: '1h' });
+    const newToken = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET_KEY, { expiresIn: '1h' });
     res.json({ token: newToken });
 };
 EOF
