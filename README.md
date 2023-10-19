@@ -22,7 +22,7 @@ mkdir auth-server && cd auth-server
 npm install passport passport-local
 
 npm init -y
-npm install express express-validator cors bcrypt jsonwebtoken dotenv
+npm install dotenv express express-validator cors bcrypt jsonwebtoken dotenv
 npm install -D nodemon jest
 
 npm pkg set main="./src/service.js"
@@ -32,16 +32,25 @@ npm pkg set scripts.test="jest"
 
 # Create files
 mkdir -p ./src/{routes,controllers,auth}
-touch ./src/service.js ./src/server.js ./src/routes/auth_routes.js ./src/passport_config.js ./src/auth/users.js
+touch ./src/service.js ./src/server.js ./src/routes/auth_routes.js ./src/passport_config.js ./src/auth/users.js .env
+```
+
+### .env
+
+```bash
+cat > .env << 'EOF'
+# Generate a key with
+# node -e "console.log(require('crypto').randomBytes(256).toString('base64'));"
+JWT_SECRET_KEY=YourJWTSecretKey
+EOF
 ```
 
 ### ./src/service.js
 
-```js
+```bash
 cat > ./src/service.js << 'EOF'
-require('dotenv').config();
+const { PORT } = require('../config');
 const app = require('./server.js');
-const PORT = process.env.PORT || 3001
 
 app.listen(PORT, () => {
     console.log(`http server listening on port ${PORT}`)
@@ -49,9 +58,24 @@ app.listen(PORT, () => {
 EOF
 ```
 
+### ./src/config.js
+
+```bash
+cat > ./src/config.js << 'EOF'
+require('dotenv').config();
+const PORT = process.env.PORT || 3001
+const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || "YourJWTSecretKey"
+
+module.exports = {
+    PORT,
+    JWT_SECRET_KEY
+};
+EOF
+```
+
 ### ./src/server.js
 
-```js
+```bash
 cat > ./src/server.js << 'EOF'
 const express = require('express');
 const cors = require('cors');
@@ -75,7 +99,7 @@ EOF
 
 ### ./src/auth/users.js
 
-```js
+```bash
 cat > ./src/auth/users.js << 'EOF'
 const bcrypt = require("bcrypt");
 const users = [
@@ -88,14 +112,12 @@ EOF
 
 ### ./src/auth/passport_config.js
 
-```js
+```bash
 cat > ./src/auth/passport_config.js << 'EOF'
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const bcrypt = require('bcrypt');
 const users = require('./users');
-
-
 
 passport.use(new LocalStrategy({
         usernameField: 'email',
@@ -125,7 +147,7 @@ EOF
 
 ### ./src/routes/auth_routes.js
 
-```js
+```bash
 cat > ./src/routes/auth_routes.js << 'EOF'
 const express = require('express');
 const { check } = require('express-validator');
