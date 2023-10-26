@@ -6,209 +6,120 @@
 npm install react-helmet
 ```
 
-### ./src/App.js
+## Backend Server
+
+### ./src/server.js
 
 ```bash
 cat > ./src/App.js << 'EOF'
-import React, { useState } from 'react';
-import { Helmet } from 'react-helmet';  // Import react-helmet
-import './App.css';
+const express = require('express');
+const cors = require('cors');
+const dataRoutes = require('./routes/data_routes');
+const { createLogger, format, transports } = require('winston');
 
-function App() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [data, setData] = useState(null);
-  const [isAuthenticated, setAuthenticated] = useState(false);
+const app = express();
 
-  const handleLogin = async () => {
-    // ... (your existing code)
-  };
+// Setup logger
+const logger = createLogger({
+    format: format.combine(
+        format.timestamp(),
+        format.json()
+    ),
+    transports: [
+        new transports.File({ filename: './log/audit.log' })
+    ]
+});
 
-  const handleRegister = async () => {
-    // ... (your existing code)
-  };
+app.use(cors());
+app.use(express.json());
+app.use('/health', require('express-healthcheck-improved')());
 
-  const handleLogout = () => {
-    // ... (your existing code)
-  };
-
-  const fetchData = async () => {
-    // ... (your existing code)
-  };
-
-  return (
-    <div className="App">
-      <Helmet>
-        <title>My Secure App</title>
-        <meta name="description" content="This is my secure React app" />
-      </Helmet>
-      <header className="App-header">
-        {isAuthenticated ? (
-          <>
-            {data ? <p>{JSON.stringify(data)}</p> : <button onClick={fetchData}>Fetch Data</button>}
-            <button onClick={handleLogout}>Logout</button>
-          </>
-        ) : (
-          <div className="auth-container">
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="input-field" />
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="input-field" />
-            <button onClick={handleLogin} className="auth-button">Login</button>
-            <button onClick={handleRegister} className="auth-button">Register</button>
-          </div>
-        )}
-      </header>
-    </div>
-  );
-}
-
-export default App;
-import React, { useState } from 'react';
-import { Helmet } from 'react-helmet';
-import './App.css';
-
-function App() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [data, setData] = useState(null);
-  const [isAuthenticated, setAuthenticated] = useState(false);
-
-  const handleLogin = async () => {
-    try {
-      const response = await fetch('http://localhost:3001/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Login failed');
-      }
-
-      localStorage.setItem('access_token', result.token);
-      setAuthenticated(true);
-    } catch (error) {
-      alert(error.message);
+// Audit Logging Middleware for Incoming Requests
+app.use((req, res, next) => {
+    if (req.user) {
+        logger.info('Request Received', {
+            method: req.method,
+            url: req.originalUrl,
+            userId: req.user.id,
+            role: req.user.role
+        });
     }
-  };
+    next();
+});
 
-  const handleRegister = async () => {
+// JWT Token Verification Middleware
+app.use(async (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.status(403).send('Access Denied');
     try {
-      const response = await fetch('http://localhost:3001/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
+        const response = await fetch('http://localhost:3001/auth/verify-token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ token })
+        });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Registration failed');
-      }
-
-      alert('Registration successful! You can now login.');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message);
+        req.user = data.user;
+        next();
     } catch (error) {
-      alert(error.message);
+        logger.error('JWT Token Verification Error', { message: error.message });
+        res.status(401).send('Invalid Token');
     }
-  };
+});
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    setAuthenticated(false);
-    setData(null);
-  };
+app.use('/data', dataRoutes);
 
-  const fetchData = async () => {
-    try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch('http://localhost:3002/data/users', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+// Error Handling and Logging
+app.use((err, req, res, next) => {
+    logger.error('Error Encountered', {
+        message: err.message,
+        stack: err.stack,
+        userId: req.user ? req.user.id : 'unknown'
+    });
+    res.status(500).send('Internal Server Error');
+});
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Failed to fetch data from backend');
-      }
-
-      setData(result);
-    } catch (error) {
-      if (error.message === 'Unauthorized') {
-        handleLogout();
-        alert('Session expired. Please login again.');
-      } else {
-        alert(error.message);
-      }
-    }
-  };
-
-  return (
-    <div className="App">
-      <Helmet>
-        <title>My Secure App</title>
-        <meta name="description" content="This is my secure React app" />
-      </Helmet>
-      <header className="App-header">
-        {isAuthenticated ? (
-          <>
-            {data ? <p>{JSON.stringify(data)}</p> : <button onClick={fetchData}>Fetch Data</button>}
-            <button onClick={handleLogout}>Logout</button>
-          </>
-        ) : (
-          <div className="auth-container">
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="input-field" />
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="input-field" />
-            <button onClick={handleLogin} className="auth-button">Login</button>
-            <button onClick={handleRegister} className="auth-button">Register</button>
-          </div>
-        )}
-      </header>
-    </div>
-  );
-}
-
-export default App;
+module.exports = app;
 EOF
 ```
 
-## SEO
+## Health Check Services
 
-```js
-<Helmet>
-  {/* Basic SEO */}
-  <title>My Secure App</title>
-  <meta name="description" content="This is my secure React app" />
-  <meta name="keywords" content="secure, react, app" />
-  
-  {/* OpenGraph Protocol for Facebook, LinkedIn */}
-  <meta property="og:title" content="My Secure App" />
-  <meta property="og:description" content="This is my secure React app" />
-  <meta property="og:image" content="path/to/your/image.jpg" />
-  <meta property="og:url" content="http://www.example.com" />
-  
-  {/* Twitter Cards */}
-  <meta name="twitter:title" content="My Secure App" />
-  <meta name="twitter:description" content="This is my secure React app" />
-  <meta name="twitter:image" content="path/to/your/image.jpg" />
-  <meta name="twitter:card" content="summary_large_image" />
+Services That Monitor Health Checks
+===================================
 
-  {/* Google Search Console Verification */}
-  <meta name="google-site-verification" content="your-google-verification-code" />
-  
-  {/* Google Analytics (replace 'UA-XXXXXXXXX-Y' with your tracking ID) */}
-  <script>
-    {
-      `
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'UA-XXXXXXXXX-Y');
-      `
-    }
-  </script>
-</Helmet>
-```
-
+*   **AWS CloudWatch**
+    *   Path: Configurable (e.g., `/health`)
+    *   Expected JSON: Usually just expects an HTTP 200 response.
+*   **Google Cloud Monitoring**
+    *   Path: Configurable (e.g., `/health`)
+    *   Expected JSON: May expect fields like `status` to be "UP".
+*   **New Relic**
+    *   Path: `/health`
+    *   Expected JSON: Customizable; often a 200 OK is sufficient.
+*   **Datadog**
+    *   Path: Customizable (e.g., `/health`)
+    *   Expected JSON: Can be configured to check for specific fields.
+*   **Pingdom**
+    *   Path: `/health`
+    *   Expected JSON: Usually just expects a 200 OK HTTP status.
+*   **Prometheus**
+    *   Path: Often `/metrics`, but can also include `/health`
+    *   Expected JSON: Can be set to expect certain metrics or statuses.
+*   **Uptime Robot**
+    *   Path: `/health`
+    *   Expected JSON: Typically expects HTTP 200.
+*   **Sensu**
+    *   Path: Configurable (e.g., `/health`)
+    *   Expected JSON: May include custom fields like `status`, `uptime`, etc.
+*   **Site24x7**
+    *   Path: `/health`
+    *   Expected JSON: Usually just expects HTTP 200 OK.
+*   **PagerDuty**
+    *   Path: Customizable
+    *   Expected JSON: Can be configured to expect specific JSON fields.
