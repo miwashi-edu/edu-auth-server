@@ -3,7 +3,7 @@
 ## Instructions
 
 ```bash
-npm install react-helmet
+npm install express-healthcheck-improved
 ```
 
 ## Backend Server
