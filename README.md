@@ -5,7 +5,7 @@
 ## Instructions
 
 ```bash
-npm install passport passport-local
+npm install react-cookie-consent
 ```
 
 ### ./src/App.js
